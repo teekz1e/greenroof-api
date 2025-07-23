@@ -3,3 +3,4 @@ uvicorn
 ezdxf
 requests
 python-multipart
+matplotlib
