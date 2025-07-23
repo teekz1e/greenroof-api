@@ -1,39 +1,29 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 import requests
 import ezdxf
-import tempfile
-import os
+import io
 
 app = FastAPI()
 
 @app.post("/analyze_dxf/")
 async def analyze_dxf(dxf_url: str = Form(...)):
     try:
+        # Prenesi datoteko z URL-ja
         response = requests.get(dxf_url)
         if response.status_code != 200:
-            return {"error": "Napaka pri prenosu DXF"}
+            return JSONResponse(status_code=400, content={"error": "Unable to download file"})
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as tmp:
-            tmp.write(response.content)
-            tmp_path = tmp.name
-
-        doc = ezdxf.readfile(tmp_path)
+        doc = ezdxf.read(io.BytesIO(response.content))
         msp = doc.modelspace()
 
         total_area = 0.0
-        for entity in msp.query("LWPOLYLINE"):
-            if entity.closed:
-                try:
-                    total_area += entity.area()
-                except:
-                    continue
 
-        os.remove(tmp_path)
+        for entity in msp:
+            if entity.dxftype() == "LWPOLYLINE" and entity.closed:
+                total_area += entity.area()
 
-        return {
-            "total_area_m2": round(total_area, 2),
-            "message": "Analiza uspešna"
-        }
+        return {"total_area_m2": round(total_area, 2)}
 
     except Exception as e:
-        return {"error": str(e)}
+        return JSONResponse(status_code=500, content={"error": str(e)})
